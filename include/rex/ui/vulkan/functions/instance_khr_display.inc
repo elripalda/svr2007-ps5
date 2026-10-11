@@ -1,0 +1,7 @@
+// [ps5 port] VK_KHR_display functions: the PS5 presents to a display plane.
+XE_UI_VULKAN_FUNCTION(vkGetPhysicalDeviceDisplayPropertiesKHR)
+XE_UI_VULKAN_FUNCTION(vkGetPhysicalDeviceDisplayPlanePropertiesKHR)
+XE_UI_VULKAN_FUNCTION(vkGetDisplayPlaneSupportedDisplaysKHR)
+XE_UI_VULKAN_FUNCTION(vkGetDisplayModePropertiesKHR)
+XE_UI_VULKAN_FUNCTION(vkGetDisplayPlaneCapabilitiesKHR)
+XE_UI_VULKAN_FUNCTION(vkCreateDisplayPlaneSurfaceKHR)
