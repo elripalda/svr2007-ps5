@@ -15,6 +15,10 @@
 #define _XOPEN_SOURCE 700
 #endif
 
+#include <rex/platform.h>
+#if REX_PLATFORM_PS5
+#include <rex/ps5_diag.h>
+#endif
 #include <rex/exception_handler.h>
 
 #if REX_PLATFORM_LINUX || REX_PLATFORM_MAC
@@ -451,6 +455,14 @@ static void ExceptionHandlerCallback(int signal_number, siginfo_t* signal_info,
       return;
     }
   }
+#if REX_PLATFORM_PS5
+  // [ps5 port] Nothing took it: the thread re-executes the faulting
+  // instruction forever (a game stuck on a loading screen). Say where.
+  if (signal_number == SIGSEGV || signal_number == SIGBUS) {
+    rex::ps5diag::UnhandledHostFault(thread_context.rip, reinterpret_cast<uintptr_t>(signal_info->si_addr),
+                                     thread_context.rsp);
+  }
+#endif
 }
 
 void ExceptionHandler::Install(Handler fn, void* data) {

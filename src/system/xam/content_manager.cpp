@@ -687,6 +687,8 @@ void ContentManager::PrepareFlatMount(const std::string& name) {
     // No hard links on this drive: work on a copy, moved back on close.
     std::filesystem::copy_file(file, link, std::filesystem::copy_options::overwrite_existing, ec);
   }
+  REXSYS_INFO("Flat saves: {} opened ({} bytes){}", name, std::filesystem::file_size(file, ec),
+              ec ? fmt::format(" - {}", ec.message()) : std::string());
 }
 
 void ContentManager::CommitFlatMount(const std::string& name) {
@@ -728,6 +730,7 @@ void ContentManager::CommitFlatMount(const std::string& name) {
       fclose(f);
     }
     std::filesystem::remove_all(mount, ec);
+    REXSYS_INFO("Flat saves: {} stored ({} bytes)", name, std::filesystem::file_size(file, ec));
     return;
   }
   if (files.empty() && !has_dirs) {

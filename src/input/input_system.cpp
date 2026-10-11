@@ -393,11 +393,13 @@ std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
       }
     }
 
+#if !REX_PLATFORM_PS5  // [ps5 port] no keyboard or mouse: the game would show "A / Cross" pairs
     // MnK driver (keyboard/mouse -> controller emulation)
     auto mnk_driver = std::make_unique<mnk::MnkInputDriver>(nullptr, 0);
     if (mnk_driver->Setup() == X_STATUS_SUCCESS) {
       input->AddDriver(std::move(mnk_driver));
     }
+#endif
   }
 
   // NOP driver (primary in tool mode, fallback otherwise)

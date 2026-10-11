@@ -174,6 +174,7 @@ static void Ps5Terminate() {
 // Every 10 s: the progress counters (rex/ps5_diag.h), so a black screen's
 // log shows which stage stopped moving.
 #include <rex/ps5_diag.h>
+#include <spdlog/spdlog.h>
 #include <chrono>
 #include <thread>
 static void Ps5DiagMonitor() {
@@ -233,9 +234,17 @@ static void Ps5DiagMonitor() {
 int main(int argc, char* argv[]) {
   chdir("/app0");
   rex::ps5diag::RegisterThread("main");
+  // A thread that crashed (it would retry its faulting instruction forever,
+  // behind a frozen loading screen): say so and close the game.
+  rex::ps5diag::crash_hook = [](const char* what) {
+    REXLOG_ERROR("SvR 2011: {} - closing (the log above says where)", what);
+    spdlog::apply_all([](const std::shared_ptr<spdlog::logger>& l) { l->flush(); });
+    Ps5Notify("SvR 2011 crashed - send /app0/logs to the developer");
+    sleep(2);
+    _exit(1);
+  };
   std::set_terminate(Ps5Terminate);
   std::thread(Ps5DiagMonitor).detach();
-  Ps5Notify("SvR 2011: starting");
   int result = RunWindowedApp(argc, argv);
   if (result != 0) Ps5Notify("SvR 2011: stopped with an error - see /app0/logs");
   return result;

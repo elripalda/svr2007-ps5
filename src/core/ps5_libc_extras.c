@@ -15,6 +15,48 @@
 #include <time.h>
 #include <unistd.h>
 
+// [ps5 port] Imports only the system's libkernel_sys exports, which a game
+// can't load: each one was a jump to address 0 (libc++'s create_hard_link
+// called link() when the game reopened its save: a crash that looped behind
+// "NOW LOADING"). They fail cleanly instead, and every caller has a fallback
+// (hard link -> a copy).
+int link(const char* from, const char* to) {
+  (void)from, (void)to;
+  errno = ENOTSUP;
+  return -1;
+}
+int symlink(const char* target, const char* path) {
+  (void)target, (void)path;
+  errno = ENOTSUP;
+  return -1;
+}
+ssize_t readlink(const char* path, char* buf, size_t size) {
+  (void)path, (void)buf, (void)size;
+  errno = EINVAL;  // (not a symbolic link: there are none)
+  return -1;
+}
+long pathconf(const char* path, int name) {
+  (void)path;
+  switch (name) {
+    case _PC_NAME_MAX: return 255;
+    case _PC_PATH_MAX: return 1024;
+    case _PC_LINK_MAX: return 1;
+    default: errno = EINVAL; return -1;
+  }
+}
+pid_t fork(void) {
+  errno = ENOSYS;
+  return -1;
+}
+pid_t vfork(void) {
+  errno = ENOSYS;
+  return -1;
+}
+pid_t setsid(void) {
+  errno = EPERM;
+  return -1;
+}
+
 // No terminals on a PS5.
 int isatty(int fd) {
   (void)fd;

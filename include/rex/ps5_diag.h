@@ -50,6 +50,13 @@ const char* ObjectTypeName(uint32_t type);
 // symbolized against the linked ELF offline.
 void RegisterThread(const char* what);
 void SampleAllThreads();
+// A host fault no handler took (a crash in some thread): logged with the
+// thread's return addresses; the thread then re-faults, so it is logged a few
+// times only.
+void UnhandledHostFault(uintptr_t rip, uintptr_t address, uintptr_t rsp);
+// Called (once) when a thread keeps faulting: tells the player and ends the
+// game rather than leave it hanging. Set by main.
+extern void (*crash_hook)(const char* what);
 uintptr_t Anchor();
 
 // Critical sections the game initialized (guest address -> game code).

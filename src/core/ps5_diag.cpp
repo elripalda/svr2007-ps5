@@ -18,6 +18,7 @@ namespace rex::ps5diag {
 std::atomic<uint64_t> counters[kCount];
 WaitSlot wait_slots[kWaitSlots];
 uintptr_t guest_arena_lo = 0, guest_arena_hi = 0;
+void (*crash_hook)(const char* what) = nullptr;
 
 namespace {
 std::atomic<int> next_slot{0};
@@ -97,6 +98,34 @@ uint32_t CriticalSectionInitBy(uint32_t guest) {
   std::lock_guard<std::mutex> lock(cs_mutex);
   auto it = CsInits().find(guest);
   return it == CsInits().end() ? 0 : it->second;
+}
+
+void UnhandledHostFault(uintptr_t rip, uintptr_t address, uintptr_t rsp) {
+  static std::atomic<uint64_t> count{0};
+  const uint64_t n = ++count;
+  if (n == 1000 && crash_hook) {
+    crash_hook("a thread crashed");  // (doesn't return)
+  }
+  if (n > 5 && n % 200000 != 0) return;
+  const uintptr_t anchor = Anchor();
+  std::string line;
+  if (ThreadEntry* e = my_entry) {
+    uintptr_t end = rsp + 64 * 1024;
+    if (e->stack_top && e->stack_top < end) end = e->stack_top;
+    int k = 0;
+    for (uintptr_t p = rsp & ~uintptr_t(7); p + 8 <= end && k < 48; p += 8) {
+      uintptr_t v = *reinterpret_cast<uintptr_t*>(p);
+      if (v > (anchor > kNear ? anchor - kNear : 0x10000) && v < anchor + kNear) {
+        char buf[24];
+        snprintf(buf, sizeof(buf), " %lX", (unsigned long)(v - anchor + 0x10000000));
+        line += buf;
+        ++k;
+      }
+    }
+  }
+  REXLOG_ERROR("ps5 crash: thread {} ({}) faulted at {:X} (rip {:X}, anchor-relative {:X}); fault #{} | stack:{}",
+               my_entry ? my_entry->tid : pthread_getthreadid_np(), my_entry ? my_entry->what : "unregistered",
+               address, rip, rip - anchor + 0x10000000, n, line);
 }
 
 uintptr_t Anchor() { return reinterpret_cast<uintptr_t>(&NowMs); }
