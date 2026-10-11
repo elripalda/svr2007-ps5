@@ -12,6 +12,8 @@
 #include <rex/platform.h>
 #if REX_PLATFORM_PS5
 #include <rex/ps5_diag.h>
+#include <rex/system/xthread.h>
+#include <rex/system/thread_state.h>
 #endif
 #include <algorithm>
 #include <cstring>
@@ -1680,6 +1682,41 @@ bool BaseHeap::AllocRange(uint32_t low_address, uint32_t high_address, uint32_t 
   }
 
   *out_address = heap_base_ + (start_page_number << page_size_shift_);
+#if REX_PLATFORM_PS5
+  if (heap_type_ == memory::HeapType::kGuestPhysical && heap_base_ == 0) {
+    // [ps5 port] Who takes the 512 MB of physical memory (the game later
+    // runs out): every physical allocation of 256 KB or more, and a total.
+    static std::atomic<uint64_t> ps5_small_bytes{0}, ps5_small_count{0};
+    static std::atomic<int> ps5_big_logs{0};
+    uint32_t bytes = page_count << page_size_shift_;
+    if (bytes >= 0x40000) {
+      if (ps5_big_logs.fetch_add(1) < 40) {
+        uint32_t lr = 0, lr1 = 0, lr2 = 0;
+        auto* t = rex::system::XThread::GetCurrentThread();
+        if (t && t->thread_state() && t->thread_state()->context()) {
+          auto* ctx = t->thread_state()->context();
+          lr = uint32_t(ctx->lr);
+          // Callers further up, from the guest stack's back chain (each frame
+          // stores the caller's r1 at 0(r1) and its return address at -8).
+          auto be32 = [this](uint32_t a) -> uint32_t {
+            if (a < 0x10000 || a >= 0xE0000000) return 0;
+            return rex::byte_swap(*memory_->TranslateVirtual<uint32_t*>(a));
+          };
+          uint32_t back1 = be32(ctx->r1.u32);
+          lr1 = back1 ? be32(back1 - 8) : 0;
+          uint32_t back2 = back1 ? be32(back1) : 0;
+          lr2 = back2 ? be32(back2 - 8) : 0;
+        }
+        REXSYS_INFO("ps5 phys: {:X} bytes at {:08X} ({}) from game code {:08X} < {:08X} < {:08X} thread {:X}; small so far {} KB in {}",
+                    bytes, *out_address, top_down ? "top down" : "bottom up", lr, lr1, lr2, t ? t->handle() : 0,
+                    ps5_small_bytes.load() / 1024, ps5_small_count.load());
+      }
+    } else {
+      ps5_small_bytes += bytes;
+      ++ps5_small_count;
+    }
+  }
+#endif
   return true;
 }
 
@@ -1741,6 +1778,18 @@ bool BaseHeap::Release(uint32_t base_address, uint32_t* out_region_size) {
   if (out_region_size) {
     *out_region_size = (base_page_entry.region_page_count << page_size_shift_);
   }
+#if REX_PLATFORM_PS5
+  if (heap_type_ == memory::HeapType::kGuestPhysical && heap_base_ == 0) {
+    static std::atomic<uint64_t> ps5_freed_bytes{0}, ps5_freed_count{0};
+    uint64_t bytes = uint64_t(base_page_entry.region_page_count) << page_size_shift_;
+    ps5_freed_bytes += bytes;
+    uint64_t n = ++ps5_freed_count;
+    if (n <= 10 || n % 50 == 0) {
+      REXSYS_INFO("ps5 phys: freed {:X} bytes at {:08X}; {} frees, {} KB in all", bytes, base_address, n,
+                  ps5_freed_bytes.load() / 1024);
+    }
+  }
+#endif
 
   // Release from host not needed as mapping reserves the range for us.
   // TODO(benvanik): protect with NOACCESS?

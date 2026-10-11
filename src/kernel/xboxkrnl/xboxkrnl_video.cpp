@@ -560,13 +560,13 @@ void RegisterVideoExports(rex::runtime::ExportResolver* export_resolver,
   REXLOG_INFO("ps5 diag: VdHSIOCalibrationLock at {:08X} (host {})", pVdHSIOCalibrationLock,
               static_cast<void*>(hsio_lock));
   std::thread([p = reinterpret_cast<volatile uint8_t*>(hsio_lock), guest = pVdHSIOCalibrationLock] {
-    uint8_t last0 = p[0], last1 = p[1];
+    uint8_t last0 = 1, last1 = 40;  // (what RtlInitializeCriticalSectionAndSpinCount(10000) wrote)
     for (int changes = 0; changes < 8;) {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
       uint8_t b0 = p[0], b1 = p[1];
       if (b0 != last0 || b1 != last1) {
-        REXLOG_INFO("ps5 diag: VdHSIOCalibrationLock {:08X} header changed: type {} -> {}, spin {} -> {}",
-                    guest, last0, b0, last1, b1);
+        REXLOG_INFO("ps5 diag: VdHSIOCalibrationLock {:08X} header changed: type {} -> {}, spin {} -> {}; bytes 8-15 {:02X}{:02X}{:02X}{:02X} {:02X}{:02X}{:02X}{:02X}",
+                    guest, last0, b0, last1, b1, p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15]);
         last0 = b0;
         last1 = b1;
         ++changes;

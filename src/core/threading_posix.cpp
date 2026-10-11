@@ -57,6 +57,69 @@ static_assert(REX_PLATFORM_LINUX || REX_PLATFORM_MAC, "This file is POSIX-only")
 #include <pthread_np.h>
 extern "C" int pthread_getname_np(pthread_t thread, char* name, size_t len);
 static inline pid_t rex_system_tid() { return pid_t(pthread_getthreadid_np()); }
+
+// [ps5 port] Thread stacks in direct memory. libkernel takes a thread's stack
+// from the title's flexible memory (about 400 MiB in all), and every guest
+// thread asks for a 16 MiB host stack: around 20 of them and pthread_create
+// fails (the game's thread creation returned STATUS_NO_MEMORY). Direct memory
+// has gigabytes. A stack is kept for reuse once its thread has been joined.
+#include <ps5platform/shm.h>
+#include <mutex>
+#include <vector>
+namespace {
+struct Ps5Stack {
+  void* base = nullptr;  // the reservation: a guard, then the stack
+  size_t bytes = 0;      // the stack's size
+};
+constexpr size_t kPs5StackUnit = 64 * 1024;
+constexpr size_t kPs5StackGuard = 64 * 1024;
+std::mutex ps5_stack_mutex;
+std::vector<Ps5Stack>& Ps5StackCache() {
+  static auto* cache = new std::vector<Ps5Stack>();
+  return *cache;
+}
+bool Ps5StackAlloc(size_t bytes, Ps5Stack* out) {
+  bytes = (bytes + kPs5StackUnit - 1) & ~(kPs5StackUnit - 1);
+  {
+    std::lock_guard<std::mutex> lock(ps5_stack_mutex);
+    auto& cache = Ps5StackCache();
+    for (size_t i = 0; i < cache.size(); ++i) {
+      if (cache[i].bytes == bytes) {
+        *out = cache[i];
+        cache.erase(cache.begin() + i);
+        return true;
+      }
+    }
+  }
+  // A reserved range with an unmapped guard below the stack, and the stack a
+  // direct-memory object mapped into the rest of it.
+  void* base = nullptr;
+  if (ps5_vrange_reserve(bytes + kPs5StackGuard, nullptr, kPs5StackUnit, &base) != 0 || !base) {
+    return false;
+  }
+  struct ps5_shm shm = {};
+  if (ps5_shm_create(bytes, &shm) != 0) {
+    ps5_vrange_release(base, bytes + kPs5StackGuard);
+    return false;
+  }
+  void* view = nullptr;
+  if (ps5_shm_map(&shm, 0, bytes, static_cast<uint8_t*>(base) + kPs5StackGuard,
+                  PS5_SHM_READ | PS5_SHM_WRITE, PS5_SHM_FIXED, &view) != 0 ||
+      view != static_cast<uint8_t*>(base) + kPs5StackGuard) {
+    ps5_shm_destroy(&shm);
+    ps5_vrange_release(base, bytes + kPs5StackGuard);
+    return false;
+  }
+  out->base = base;
+  out->bytes = bytes;
+  return true;
+}
+void Ps5StackFree(const Ps5Stack& stack) {
+  if (!stack.base) return;
+  std::lock_guard<std::mutex> lock(ps5_stack_mutex);
+  Ps5StackCache().push_back(stack);
+}
+}  // namespace
 #else
 static inline pid_t rex_system_tid() { return pid_t(syscall(SYS_gettid)); }
 #endif
@@ -707,10 +770,24 @@ class PosixCondition<Thread> : public PosixConditionBase {
     pthread_attr_t attr;
     if (pthread_attr_init(&attr) != 0)
       return false;
+#if REX_PLATFORM_PS5
+    if (params.stack_size > 2 * 1024 * 1024 && Ps5StackAlloc(params.stack_size, &ps5_stack_)) {
+      if (pthread_attr_setstack(&attr, static_cast<uint8_t*>(ps5_stack_.base) + kPs5StackGuard,
+                                ps5_stack_.bytes) != 0) {
+        Ps5StackFree(ps5_stack_);
+        ps5_stack_ = {};
+      }
+    }
+    if (!ps5_stack_.base && pthread_attr_setstacksize(&attr, params.stack_size) != 0) {
+      pthread_attr_destroy(&attr);
+      return false;
+    }
+#else
     if (pthread_attr_setstacksize(&attr, params.stack_size) != 0) {
       pthread_attr_destroy(&attr);
       return false;
     }
+#endif
     if (params.initial_priority != 0) {
       sched_param sched{};
       sched.sched_priority = params.initial_priority + 1;
@@ -723,7 +800,13 @@ class PosixCondition<Thread> : public PosixConditionBase {
         return false;
       }
     }
-    if (pthread_create(&thread_, &attr, ThreadStartRoutine, start_data) != 0) {
+    if (int err = pthread_create(&thread_, &attr, ThreadStartRoutine, start_data); err != 0) {
+#if REX_PLATFORM_PS5
+      REXLOG_ERROR("ps5: pthread_create failed: error {} (stack {} KB, {})", err, params.stack_size / 1024,
+                   ps5_stack_.base ? "direct memory" : "libkernel's");
+      Ps5StackFree(ps5_stack_);
+      ps5_stack_ = {};
+#endif
       pthread_attr_destroy(&attr);
       return false;
     }
@@ -1094,7 +1177,14 @@ class PosixCondition<Thread> : public PosixConditionBase {
   inline bool signaled() const override { return signaled_; }
   inline void post_execution() override {
     if (thread_) {
+#if REX_PLATFORM_PS5
+      if (pthread_join(thread_, nullptr) == 0) {
+        Ps5StackFree(ps5_stack_);  // (the thread is gone: its stack can serve another)
+        ps5_stack_ = {};
+      }
+#else
       pthread_join(thread_, nullptr);
+#endif
     }
 #if defined(__APPLE__)
     if (suspend_sem_ != SEM_FAILED) {
@@ -1106,6 +1196,9 @@ class PosixCondition<Thread> : public PosixConditionBase {
 #endif
   }
   pthread_t thread_;
+#if REX_PLATFORM_PS5
+  Ps5Stack ps5_stack_;
+#endif
   bool signaled_;
   int exit_code_;
   State state_;             // Protected by state_mutex_
