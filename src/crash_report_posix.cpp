@@ -89,7 +89,7 @@ void Report(int sig, siginfo_t* info, void* ucontext) {
   const std::filesystem::path text = g_dir / (std::string("crash_") + stamp + ".txt");
   FILE* f = std::fopen(text.c_str(), "w");
   char buf[512];
-  std::snprintf(buf, sizeof(buf), "SvR 2011 crash: %s (thread %d), address %p", SignalName(sig), gettid(),
+  std::snprintf(buf, sizeof(buf), "SvR 2007 crash: %s (thread %d), address %p", SignalName(sig), gettid(),
                 info ? info->si_addr : nullptr);
   Line(f, buf);
 #if defined(__PROSPERO__)

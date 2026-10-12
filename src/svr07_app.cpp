@@ -15,14 +15,22 @@
 namespace {
 
 // The settings a first start writes (svr07.toml beside the app; edit it over FTP).
+constexpr char kConfigVersion[] = "(settings v2)";
 constexpr char kDefaultConfig[] =
-    "# WWE SmackDown vs. Raw 2007 - settings\n"
+    "# WWE SmackDown vs. Raw 2007 - settings (settings v2)\n"
     "gpu_plugin = \"xenos\"\n"
     "input_backend = \"xinput\"\n"
     "# 1 = the Xbox 360's 720p, 2 = 1440p, 3 = 4K\n"
     "resolution_scale = 2\n"
     "anisotropic_override = 3\n"
-    "vsync = true\n";
+    "vsync = true\n"
+    "# (the PS5's GPU driver: one plain buffer for the Xbox 360's memory, no sparse binding)\n"
+    "vulkan_sparse_shared_memory = false\n"
+    "\n"
+    "# test builds: more detail in the log\n"
+    "[log.levels]\n"
+    "gpu = \"debug\"\n"
+    "fs = \"debug\"\n";
 
 }  // namespace
 
@@ -49,7 +57,15 @@ void Svr07App::OnConfigurePaths(rex::PathConfig& paths) {
   paths.user_data_root = app / "UserData";
   paths.cache_root = app / "UserData" / "cache";
   svr07::InstallCrashReporter(app / "UserData" / "crashes");
-  if (!std::filesystem::exists(paths.config_path, ec)) std::ofstream(paths.config_path) << kDefaultConfig;
+  // (a settings file from an earlier test build is replaced)
+  bool current = false;
+  {
+    std::ifstream in(paths.config_path);
+    std::string first;
+    std::getline(in, first);
+    current = first.find(kConfigVersion) != std::string::npos;
+  }
+  if (!current) std::ofstream(paths.config_path, std::ios::trunc) << kDefaultConfig;
 }
 
 void Svr07App::OnPostLoadXexImage() {
