@@ -11,6 +11,15 @@ project(svr07 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# The PS5: no profiler, and none of SDL's desktop backends (the runtime's PS5
+# platform layer has the display, audio and the DualSense) - as SvR 2011 builds.
+if(REX_PS5)
+    set(REXGLUE_ENABLE_TRACY OFF CACHE BOOL "" FORCE)
+    foreach(opt SDL_DBUS SDL_HIDAPI SDL_IBUS SDL_JACK SDL_KMSDRM SDL_LIBUDEV SDL_OFFSCREEN SDL_OSS SDL_SNDIO)
+        set(${opt} OFF CACHE BOOL "" FORCE)
+    endforeach()
+endif()
+
 include(generated/rexglue.cmake)
 
 add_executable(svr07 src/main.cpp src/svr07_app.cpp src/crash_report_posix.cpp)
