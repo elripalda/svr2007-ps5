@@ -18,6 +18,7 @@ namespace {
 constexpr char kDefaultConfig[] =
     "# WWE SmackDown vs. Raw 2007 - settings\n"
     "gpu_plugin = \"xenos\"\n"
+    "input_backend = \"xinput\"\n"
     "# 1 = the Xbox 360's 720p, 2 = 1440p, 3 = 4K\n"
     "resolution_scale = 2\n"
     "anisotropic_override = 3\n"
