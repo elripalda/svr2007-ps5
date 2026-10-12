@@ -1,0 +1,5 @@
+out/
+assets/
+generated/default/
+*.xex
+art/local/

@@ -1,0 +1,17 @@
+# WWE SmackDown vs. Raw 2007 - codegen overrides for default.xex (from SVR07-Recomp's config/functions.toml)
+
+[functions]
+0x824625F0 = { name = "svr07_state_824625F0", size = 0xF4 }
+0x82462A00 = { name = "svr07_state_82462A00", size = 0x6C }
+0x825C50A8 = { name = "svr07_thunk_825C50A8", size = 0x8 }
+0x825D0840 = { name = "svr07_refinc_825D0840", size = 0x14 }
+0x825E7B78 = { name = "svr07_vtbl_825E7B78", size = 0x24 }
+0x82471250 = { name = "svr07_vtbl_82471250", size = 0x18 }
+0x825C1380 = { name = "svr07_vtbl_825C1380", size = 0x18 }
+
+# Functions the analysis misses (reached only through vtables / tail branches);
+# SVR07-Recomp patched these into its generated code by hand.
+0x822EDBA0 = { name = "sub_822EDBA0", size = 0x4 }   # trampoline to 822ED5A8 (quit match from pause)
+0x8242C948 = { name = "sub_8242C948", size = 0x14 }  # null-checked vtable dispatch (after character/stage select)
+0x8242CB20 = { name = "sub_8242CB20", size = 0x48 }  # belt attachment matrix copy
+0x8226DAA8 = { name = "sub_8226DAA8", size = 0x10 }  # vtable[10] thunk (profile flags)

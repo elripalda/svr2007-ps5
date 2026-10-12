@@ -1,0 +1,11 @@
+# WWE SmackDown vs. Raw 2007 - PS5 port (SVR07-Recomp by HollywoodAkeem, on the PS5 runtime)
+
+[project]
+name = "svr07"
+sdk_version = "0.10.0"
+game_root = "assets"
+
+[entrypoint]
+file_path = "assets/default.xex"
+out_directory_path = "generated/default"
+includes = ["svr07_config.toml"]
