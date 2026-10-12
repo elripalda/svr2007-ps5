@@ -11,11 +11,14 @@
 #include <rex/logging.h>
 
 #include "crash_report.h"
+#include "hub/ps5_hub.h"
 #include "pad_icons.h"
 
 #include <rex/runtime.h>
 
 namespace {
+
+std::filesystem::path g_config_path;
 
 // The settings a first start writes (svr07.toml beside the app; edit it over FTP).
 constexpr char kConfigVersion[] = "(settings v2)";
@@ -69,7 +72,32 @@ void Svr07App::OnConfigurePaths(rex::PathConfig& paths) {
     current = first.find(kConfigVersion) != std::string::npos;
   }
   if (!current) std::ofstream(paths.config_path, std::ios::trunc) << kDefaultConfig;
+  g_config_path = paths.config_path;
 }
+
+#if defined(__PROSPERO__)
+std::optional<rex::PathConfig> Svr07App::OnFinalizePaths(const rex::PathConfig& defaults,
+                                                         std::function<void(rex::PathConfig)> resume) {
+  if (!imgui_drawer()) return defaults;
+  const std::filesystem::path app = rex::filesystem::GetExecutableFolder();
+  svr07::hub::Paths paths{app, g_config_path, app / "UserData"};
+  svr07::hub::Show(imgui_drawer(), immediate_drawer(), paths, [this, defaults, resume] {
+    // The hub's changes (svr07.toml) apply to this start.
+    rex::cvar::LoadConfig(g_config_path);
+    REXLOG_INFO("PS5 hub: START GAME");
+    app_context().CallInUIThreadDeferred([defaults, resume] { resume(defaults); });
+  });
+  return std::nullopt;
+}
+
+void Svr07App::OnConfigureFonts(ImFontAtlas* atlas) { svr07::hub::ConfigureFonts(atlas); }
+#else
+std::optional<rex::PathConfig> Svr07App::OnFinalizePaths(const rex::PathConfig& defaults,
+                                                         std::function<void(rex::PathConfig)>) {
+  return defaults;
+}
+void Svr07App::OnConfigureFonts(ImFontAtlas*) {}
+#endif
 
 void Svr07App::OnPostLoadXexImage() {
   REXLOG_INFO("==== SmackDown vs. Raw 2007 PS5 port (test build) ====");

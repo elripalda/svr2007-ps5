@@ -2,6 +2,9 @@
 // SVR07-Recomp on the ReXGlue runtime's PS5 platform layer).
 #pragma once
 
+#include <functional>
+#include <optional>
+
 #include <rex/rex_app.h>
 
 class Svr07App : public rex::ReXApp {
@@ -14,4 +17,8 @@ class Svr07App : public rex::ReXApp {
 
   void OnConfigurePaths(rex::PathConfig& paths) override;
   void OnPostLoadXexImage() override;
+  // [ps5 port] The hub (src/hub) first; START GAME continues the start.
+  std::optional<rex::PathConfig> OnFinalizePaths(const rex::PathConfig& defaults,
+                                                 std::function<void(rex::PathConfig)> resume) override;
+  void OnConfigureFonts(ImFontAtlas* atlas) override;
 };

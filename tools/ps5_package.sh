@@ -43,8 +43,10 @@ echo "==> [link] ${#inputs[@]} objects and libraries from CMake"
 export PS5_CLANG=${PS5_CLANG:-$(command -v clang-19 || command -v clang)}
 source "$tri/tools/radv-link.sh"
 radv_link_recipe "$stage" "$sdk_root" "$radv_archive"
+# (the recipe's layout, with a fixed gap for the process parameters)
+radv_linker_script=(-T "$port/tools/ps5-pie-svr07.ld")
 
-echo "==> [link] SvR 2011 + RADV into a PS5 PIE ELF"
+echo "==> [link] SvR 2007 + RADV into a PS5 PIE ELF"
 "$sdk_root/bin/prospero-lld" "${radv_linker_script[@]}" --eh-frame-hdr "${radv_link_flags[@]}" \
     --version-script "$tri/tooling/native/app-symbols.map" --exclude-libs=ALL \
     -e _start -o "$stage/build/llvm-pie.elf" \
@@ -95,6 +97,11 @@ EOF
 if [[ -d $port/art/local/pad_icons ]]; then
     mkdir -p "$app/pad_icons"
     cp "$port"/art/local/pad_icons/*.dds "$app/pad_icons/"
+fi
+# The hub's art and menu music (art/local/hub: logo.png, hero.jpg, buttons/,
+# music/ - your own, never in the repo) -> <app>/hub
+if [[ -d $port/art/local/hub ]]; then
+    cp -r "$port/art/local/hub" "$app/hub"
 fi
 # Home screen art (your own, from assets/ps5/): icon0.png 512x512; pic0.dds /
 # pic1.dds the 3840x2160 BC7 background and launch splash.

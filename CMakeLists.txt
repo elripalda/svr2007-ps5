@@ -23,9 +23,16 @@ endif()
 include(generated/rexglue.cmake)
 
 add_executable(svr07 src/main.cpp src/svr07_app.cpp src/crash_report_posix.cpp src/pad_icons.cpp)
+# The hub: the screen the app opens on (src/hub, from the SvR 2011 port); its
+# fonts are built into the app (fonts/, SIL Open Font License).
+target_sources(svr07 PRIVATE src/hub/hub_ui.cpp src/hub/ps5_hub.cpp src/hub/hub_sfx.cpp src/ps5/sound.cpp)
+set_source_files_properties(src/hub/ps5_hub.cpp PROPERTIES
+    COMPILE_DEFINITIONS "SVR07_FONTS_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/fonts\""
+    OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/fonts/oswald-latin-700-normal.ttf")
 rexglue_setup_target(svr07 GPU_PLUGINS xenos)
 if(REXSDK_DIR AND TARGET imgui)
     # SDK source tree: ImGui (built into the runtime) is not on the public
     # include path the way the installed SDK bundles it.
-    target_include_directories(svr07 PRIVATE $<TARGET_PROPERTY:imgui,INTERFACE_INCLUDE_DIRECTORIES>)
+    target_include_directories(svr07 PRIVATE $<TARGET_PROPERTY:imgui,INTERFACE_INCLUDE_DIRECTORIES>
+                                             ${REXSDK_DIR}/thirdparty/stb)
 endif()
