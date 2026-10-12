@@ -11,6 +11,9 @@
 #include <rex/logging.h>
 
 #include "crash_report.h"
+#include "pad_icons.h"
+
+#include <rex/runtime.h>
 
 namespace {
 
@@ -71,4 +74,6 @@ void Svr07App::OnConfigurePaths(rex::PathConfig& paths) {
 void Svr07App::OnPostLoadXexImage() {
   REXLOG_INFO("==== SmackDown vs. Raw 2007 PS5 port (test build) ====");
   REXLOG_INFO("game folder: {}", game_data_root().string());
+  // PlayStation button pictures (before the game opens its archives)
+  svr07::InstallPadIcons(runtime()->file_system(), game_data_root(), rex::filesystem::GetExecutableFolder());
 }

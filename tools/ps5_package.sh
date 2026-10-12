@@ -90,6 +90,12 @@ cat > "$app/sce_sys/param.json" <<EOF
   "versionFileUri": ""
 }
 EOF
+# PlayStation button pictures (art/local/pad_icons, made from your game files:
+# never in the repo) -> <app>/pad_icons
+if [[ -d $port/art/local/pad_icons ]]; then
+    mkdir -p "$app/pad_icons"
+    cp "$port"/art/local/pad_icons/*.dds "$app/pad_icons/"
+fi
 # Home screen art (your own, from assets/ps5/): icon0.png 512x512; pic0.dds /
 # pic1.dds the 3840x2160 BC7 background and launch splash.
 for asset in icon0.png pic0.dds pic1.dds snd0.at9; do

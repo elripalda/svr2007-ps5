@@ -22,7 +22,7 @@ endif()
 
 include(generated/rexglue.cmake)
 
-add_executable(svr07 src/main.cpp src/svr07_app.cpp src/crash_report_posix.cpp)
+add_executable(svr07 src/main.cpp src/svr07_app.cpp src/crash_report_posix.cpp src/pad_icons.cpp)
 rexglue_setup_target(svr07 GPU_PLUGINS xenos)
 if(REXSDK_DIR AND TARGET imgui)
     # SDK source tree: ImGui (built into the runtime) is not on the public
