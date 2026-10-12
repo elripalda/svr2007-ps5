@@ -121,7 +121,7 @@ int main(int argc, char** argv) {
   }
   svr07::hub::Hub hub;
   svr07::hub::Paths paths{game, game + "/svr07.toml", game + "/UserData"};
-  hub.Init(paths, a, "test 13");
+  hub.Init(paths, a, "");
   static int song = 0;
   svr07::hub::Audio audio;
   audio.next_song = [] { return std::string(++song % 2 ? "Rise Up" : "Across the Nation"); };

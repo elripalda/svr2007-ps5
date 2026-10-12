@@ -21,7 +21,7 @@ namespace svr07::hub {
 
 namespace fs = std::filesystem;
 
-static const char* const kTabNames[kTabCount] = {"HOME", "SETTINGS", "SAVES", "ABOUT"};
+static const char* const kTabNames[kTabCount] = {"HOME", "SETTINGS", "SAVES", "INSTALL", "ABOUT"};
 
 namespace {
 
@@ -155,6 +155,9 @@ void Hub::Load() {
     config_.emplace_back(k, v);
   }
   LoadSaves();
+  // (the disc images are looked for only when the game isn't installed yet)
+  LoadInstall(false);
+  if (!state_.Installed()) LoadInstall(true);
 }
 
 void Hub::LoadSaves() {
@@ -291,14 +294,8 @@ void Hub::Save(const std::string& key, const std::string& value) {
   fs::rename(tmp, paths_.config, ec);
 }
 
-void Hub::NowPlaying(const std::string& name) {
-  if (name.empty()) return;
-  if (time_ < 1.2f) {  // (shown once the hub has come up)
-    pending_song_ = name;
-    return;
-  }
-  Toast("Now playing: " + name);
-  toast_song_ = true;
+void Hub::NowPlaying(const std::string&) {
+  // (songs change quietly: no name on the screen)
 }
 
 // ------------------------------------------------------------------ drawing
@@ -596,10 +593,12 @@ void Hub::DrawHints() {
     r = Hint(r, kCross, confirm_yes_.c_str());
     return;
   }
-  if (tab_ != kHome) r = Hint(r, kOptions, "Start Game");
-  if (tab_ != kHome) r = Hint(r, kCircle, "Home");
+  if (tab_ != kHome && !task_ && (state_.Installed() || tab_ != kInstallTab))
+    r = Hint(r, kOptions, state_.Installed() ? "Start Game" : "Set Up Game");
+  if (tab_ != kHome && tab_ != kInstallTab) r = Hint(r, kCircle, "Home");
   switch (tab_) {
-    case kHome: r = Hint(r, kCross, "Start Game"); break;
+    case kHome: r = Hint(r, kCross, state_.Installed() ? "Start Game" : "Set Up Game"); break;
+    case kInstallTab: r = InstallHints(r); break;
     case kSettingsTab: r = Hint(r, kLeft | kRight, "Change"); break;
     case kSavesTab:
       if (item_[tab_] <= int(backups_.size())) r = Hint(r, kCross, item_[tab_] == 0 ? "Back Up" : "Restore");
@@ -621,7 +620,7 @@ void Hub::DrawHints() {
     }
     Text(a_.body_bold, 20, 146 + (toast_song_ ? 8 : 0), y + 8, White(0.92f * a), toast_);
   } else {
-    Text(a_.body, 18, 112, 1012, White(0.32f), "SmackDown vs. Raw 2007 " + version_ + "  \xC2\xB7  PlayStation 5");
+    Text(a_.body, 18, 112, 1012, White(0.32f), "SmackDown vs. Raw 2007" + (version_.empty() ? "" : " " + version_) + "  \xC2\xB7  PlayStation 5");
   }
 }
 
@@ -689,7 +688,7 @@ void Hub::DrawHome() {
   const ImU32 ink = Mix(kInk, kText, press_);
   const float tx = bx + 40;
   dl_->AddTriangleFilled(P(tx, by + bh * 0.5f - 15), P(tx + 26, by + bh * 0.5f), P(tx, by + bh * 0.5f + 15), ink);
-  Text(a_.display, 40, tx + 48, by + bh * 0.5f - 23, ink, "START GAME", 0, 2);
+  Text(a_.display, 40, tx + 48, by + bh * 0.5f - 23, ink, state_.Installed() ? "START GAME" : "SET UP GAME", 0, 2);
   Fade(v0, in_btn);
 
 }
@@ -807,7 +806,7 @@ void Hub::DrawSaves() {
 }
 
 void Hub::DrawAbout() {
-  PageTitle("ABOUT", "SmackDown vs. Raw 2007 for PlayStation 5  \xC2\xB7  " + version_);
+  PageTitle("ABOUT", "SmackDown vs. Raw 2007 for PlayStation 5" + (version_.empty() ? "" : "  \xC2\xB7  " + version_));
   struct Credit {
     const char* who;
     const char* what;
@@ -849,6 +848,7 @@ int Hub::Items() const {
   switch (tab_) {
     case kSettingsTab: return int(Settings().size());
     case kSavesTab: return 1 + int(backups_.size()) + int(save_items_.size());
+    case kInstallTab: return task_ ? 0 : int(images_.size());
     default: return 0;
   }
 }
@@ -887,11 +887,7 @@ void Hub::Navigate(const Pad& pad) {
   if (leaving_) return;
   // R3: the next song, anywhere
   if ((p & kR3) && audio_.next_song) {
-    const std::string name = audio_.next_song();
-    if (!name.empty()) {
-      Toast("Now playing: " + name);
-      toast_song_ = true;
-    }
+    audio_.next_song();  // (quietly: the music just changes)
   }
   if (confirm_) {  // a question: Cross does it, Circle doesn't
     if ((p & kCross) && confirm_in_ > 0.6f) {  // (not before it has been seen)
@@ -904,13 +900,30 @@ void Hub::Navigate(const Pad& pad) {
     }
     return;
   }
+  // START GAME: once the game is installed (and not while it installs)
+  auto start = [&] {
+    if (task_) {
+      Play(Sound::kError);
+      Toast("Wait for the install to finish");
+    } else if (!state_.Installed()) {
+      Play(Sound::kSelect);
+      GoTo(kInstallTab, 1);
+    } else {
+      press_ = 1, launch_ = true;
+    }
+  };
   if (p & kOptions) {
-    press_ = 1, launch_ = true;
+    start();
     return;
   }
   if (p & (kL1 | kR1)) {
     GoTo((tab_ + ((p & kR1) ? 1 : kTabCount - 1)) % kTabCount, (p & kR1) ? 1.0f : -1.0f);
     Play(Sound::kPage);
+    return;
+  }
+  if ((p & kCircle) && tab_ == kInstallTab && task_) {
+    StopTask();
+    Play(Sound::kBack);
     return;
   }
   if ((p & kCircle) && tab_ != kHome) {
@@ -919,7 +932,11 @@ void Hub::Navigate(const Pad& pad) {
     return;
   }
   if (tab_ == kHome) {
-    if (p & kCross) press_ = 1, launch_ = true;
+    if (p & kCross) start();
+    return;
+  }
+  if (tab_ == kInstallTab && !task_ && (p & kSquare)) {
+    InstallActivate(2);
     return;
   }
   const int n = Items();
@@ -938,6 +955,10 @@ void Hub::Navigate(const Pad& pad) {
     case kSavesTab:
       if (p & kCross) press_ = 1, Activate(0);
       break;
+    case kInstallTab:
+      if (p & kCross) press_ = 1, InstallActivate(0);
+      if (p & kTriangle) press_ = 0.6f, InstallActivate(1);
+      break;
   }
 }
 
@@ -951,14 +972,16 @@ void Hub::GoTo(int tab, float dir) {
   page_dir_ = dir;
   panel_in_ = 1;
   panel_item_ = item_[tab_];
-  if (tab == kSavesTab) LoadSaves();  // (what it shows can change while the hub is open)
+  // (what these pages show can change while the hub is open: looked at again)
+  if (tab == kSavesTab) LoadSaves();
+  if (tab == kInstallTab && !task_) LoadInstall(true);
 }
 
 bool Hub::Draw(const Pad& pad, float dt) {
   dt_ = std::clamp(dt, 0.0f, 0.1f);
   time_ += dt_;
   toast_time_ = std::max(0.0f, toast_time_ - dt_);
-  if (!pending_song_.empty() && time_ >= 1.2f) NowPlaying(std::exchange(pending_song_, std::string()));
+  PollTask();
   Navigate(pad);
   if (launch_ && !leaving_) {
     leaving_ = true, press_ = 1;
@@ -984,6 +1007,7 @@ bool Hub::Draw(const Pad& pad, float dt) {
     case kHome: DrawHome(); break;
     case kSettingsTab: DrawSettings(); break;
     case kSavesTab: DrawSaves(); break;
+    case kInstallTab: DrawInstall(); break;
     case kAboutTab: DrawAbout(); break;
   }
   ox_ -= shift * s_;

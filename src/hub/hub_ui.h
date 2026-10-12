@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 
+#include "hub_install.h"
 #include "imgui.h"
 
 namespace svr07::hub {
@@ -74,7 +75,7 @@ struct Audio {
 };
 
 // The pages, in the order of the top bar.
-enum Tab { kHome, kSettingsTab, kSavesTab, kAboutTab, kTabCount };
+enum Tab { kHome, kSettingsTab, kSavesTab, kInstallTab, kAboutTab, kTabCount };
 
 class Hub {
  public:
@@ -87,6 +88,8 @@ class Hub {
   // A song started (shown at the bottom for a few seconds).
   void NowPlaying(const std::string& name);
   bool HasMusic() const { return music_; }
+  // The game's files are in Assets (START GAME can go).
+  bool Installed() const { return state_.Installed(); }
   void SetHasMusic(bool on) { music_ = on; }
 
   struct Setting;
@@ -126,6 +129,16 @@ class Hub {
   void DrawSettings();
   void DrawSaves();
   void DrawAbout();
+  void DrawInstall();
+  void DrawInstallProgress();
+  void Empty(const char* title, const std::string& text);
+  // the installer (hub_install_page.cpp): a job on a thread
+  void LoadInstall(bool scan);
+  void StartInstall(const std::filesystem::path& image);
+  void PollTask();
+  void StopTask();
+  void InstallActivate(int what);  // 0 install, 1 delete the file, 2 look again
+  float InstallHints(float right);
   void GoTo(int tab, float dir);
   void PageTitle(const char* title, const std::string& subtitle);
   // A scrolled list with headings at the page's left: rows' items are
@@ -153,6 +166,8 @@ class Hub {
     confirm_ = std::move(action);
     confirm_in_ = 0;
   }
+  // A message (Cross closes it).
+  void Notice(std::string title, std::string text) { Confirm(std::move(title), std::move(text), "OK", [] {}); }
   void BackUpSaves(const std::string& why);
   void RestoreSaves(const Backup& b);
 
@@ -191,6 +206,14 @@ class Hub {
 
   std::vector<std::pair<std::string, std::string>> config_;  // top-level key = value
   std::vector<SaveItem> save_items_;
+  // install
+  install::State state_;
+  std::vector<install::DiscImage> images_;
+  struct Task;
+  std::shared_ptr<Task> task_;
+  float task_speed_ = 0, task_in_ = 0;
+  uint64_t task_last_ = 0;
+  std::filesystem::path task_file_;
   std::vector<Backup> backups_;
 
   // helpers (virtual coordinates)

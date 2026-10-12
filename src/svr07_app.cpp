@@ -113,11 +113,20 @@ std::optional<rex::PathConfig> Svr07App::OnFinalizePaths(const rex::PathConfig& 
   if (!imgui_drawer()) return defaults;
   const std::filesystem::path app = rex::filesystem::GetExecutableFolder();
   svr07::hub::Paths paths{app, g_config_path, app / "UserData"};
-  svr07::hub::Show(imgui_drawer(), immediate_drawer(), paths, [this, defaults, resume] {
+  svr07::hub::Show(imgui_drawer(), immediate_drawer(), paths, [this, defaults, resume, app] {
     // The hub's changes (svr07.toml) apply to this start.
     rex::cvar::LoadConfig(g_config_path);
-    REXLOG_INFO("PS5 hub: START GAME");
-    app_context().CallInUIThreadDeferred([defaults, resume] { resume(defaults); });
+    // (the game may have been installed in the hub just now: its folder again)
+    rex::PathConfig start = defaults;
+    std::error_code ec;
+    if (std::filesystem::exists(app / "Assets" / "default.xex", ec)) {
+      start.game_data_root = app / "Assets";
+      start.update_data_root.clear();
+      if (std::filesystem::is_directory(start.game_data_root / "1_update", ec))
+        start.update_data_root = start.game_data_root / "1_update";
+    }
+    REXLOG_INFO("PS5 hub: START GAME (game folder {})", start.game_data_root.string());
+    app_context().CallInUIThreadDeferred([start, resume] { resume(start); });
   });
   return std::nullopt;
 }

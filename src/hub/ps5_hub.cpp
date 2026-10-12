@@ -19,6 +19,7 @@
 #include <rex/ui/imgui_dialog.h>
 #include <rex/ui/imgui_drawer.h>
 #include <rex/ui/immediate_drawer.h>
+#include <rex/ui/pad_dialog_style.h>
 
 #include "hub_sfx.h"
 #include "hub_ui.h"
@@ -239,6 +240,44 @@ class HubAudio {
   bool leaving_ = false;
 };
 
+// The menu sounds for the game's own dialogs (the on-screen keyboard), after
+// the hub has gone: made in code, a few voices of their own.
+class MenuSfx {
+ public:
+  MenuSfx() {
+    for (auto& v : voices_) v = svr07::sound::NewVoice();
+    for (int k = 0; k <= int(Sound::kError); ++k)
+      synth_[k] = std::make_shared<const std::vector<float>>(SynthSound(Sound(k)));
+  }
+  void Play(int k) {
+    if (k < 0 || k > int(Sound::kError)) return;
+    auto* v = voices_[next_++ % voices_.size()];
+    v->SetVolume(0.85f);
+    v->Play(svr07::sound::Memory(synth_[k]), false);
+  }
+
+ private:
+  std::array<svr07::sound::Voice*, 4> voices_{};
+  std::array<std::shared_ptr<const std::vector<float>>, 8> synth_;
+  size_t next_ = 0;
+};
+
+// The game's on-screen keyboard in the hub's style (rex/ui/pad_dialog_style.h).
+void StyleGameDialogs(const Assets& a) {
+  static MenuSfx* sfx = new MenuSfx();  // (for the app's life)
+  rex::ui::PadDialogStyle st;
+  st.title = a.display;
+  st.body = a.body;
+  st.bold = a.body_bold;
+  const std::pair<uint32_t, uint32_t> map[] = {{kCross, 0x1000}, {kCircle, 0x2000}, {kSquare, 0x4000},
+                                               {kTriangle, 0x8000}, {kL1, 0x0100}, {kR1, 0x0200},
+                                               {kOptions, 0x0010}, {kLeft | kRight, 0x000C}};
+  for (const auto& [hub, xbox] : map)
+    if (auto it = a.buttons.find(hub); it != a.buttons.end() && it->second) st.buttons[xbox] = it->second.id;
+  st.sound = [](int k) { sfx->Play(k); };
+  rex::ui::SetPadDialogStyle(std::move(st));
+}
+
 class HubDialog final : public rex::ui::ImGuiDialog {
  public:
   HubDialog(rex::ui::ImGuiDrawer* drawer, rex::ui::ImmediateDrawer* immediate, const Paths& paths,
@@ -255,7 +294,8 @@ class HubDialog final : public rex::ui::ImGuiDialog {
         {kR1, "R1"},       {kOptions, "Options"}, {kLeft | kRight, "D-Pad"}, {kR3, "R3"}};
     for (const auto& [b, n] : names)
       if (Image img = Load(immediate, hub / "buttons" / (std::string(n) + ".png"))) a.buttons[b] = img;
-    hub_.Init(paths, a, "test 13");
+    hub_.Init(paths, a, "");
+    StyleGameDialogs(a);
     audio_ = std::make_unique<HubAudio>(hub);
     Audio hooks;
     hooks.sfx = [this](Sound s) { audio_->Sfx(s); };
