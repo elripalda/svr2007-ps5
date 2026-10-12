@@ -98,7 +98,8 @@ void SDLInputDriver::OnWindowAvailable(rex::ui::Window* window) {
       // Load custom controller mappings if available
       if (!REXCVAR_GET(hid_mappings_file).empty()) {
         std::filesystem::path mappings_path(REXCVAR_GET(hid_mappings_file));
-        if (!std::filesystem::exists(mappings_path)) {
+        std::error_code exists_error;  // (a path the platform can't stat is "not there", not a crash)
+        if (!std::filesystem::exists(mappings_path, exists_error)) {
           REXLOG_WARN("SDL GameControllerDB: file '{}' does not exist.",
                       REXCVAR_GET(hid_mappings_file));
         } else {

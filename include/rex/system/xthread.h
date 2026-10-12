@@ -392,6 +392,10 @@ class XThread : public XObject {
     pending_mutant_acquires_.push_back(mutant);
   }
 
+  // [ps5 port] the guest stack's range [limit, base) (diagnostics)
+  uint32_t guest_stack_base() const { return stack_base_; }
+  uint32_t guest_stack_limit() const { return stack_limit_; }
+
  protected:
   bool AllocateStack(uint32_t size);
   void FreeStack();

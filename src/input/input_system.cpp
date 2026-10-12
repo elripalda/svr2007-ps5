@@ -386,12 +386,14 @@ std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
       }
     }
 #endif
+#if !REX_PLATFORM_PS5  // [ps5 port] SDL has no PS5 pads (the DualSense driver above)
     if (REXCVAR_GET(input_backend) == "sdl") {
       auto sdl_driver = std::make_unique<sdl::SDLInputDriver>(nullptr, 0);
       if (sdl_driver->Setup() == X_STATUS_SUCCESS) {
         input->AddDriver(std::move(sdl_driver));
       }
     }
+#endif
 
 #if !REX_PLATFORM_PS5  // [ps5 port] no keyboard or mouse: the game would show "A / Cross" pairs
     // MnK driver (keyboard/mouse -> controller emulation)

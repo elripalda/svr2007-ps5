@@ -42,8 +42,13 @@ struct Ps5WaitScope {
     auto* thread = rex::system::XThread::GetCurrentThread();
     slot->thread_id = thread ? thread->handle() : 0;  // (as the "thread ... (F80000xx)" log lines)
     slot->guest_lr = 0;
+    slot->guest_sp = slot->guest_stack_lo = slot->guest_stack_hi = 0;
     if (thread && thread->thread_state() && thread->thread_state()->context()) {
-      slot->guest_lr = uint32_t(thread->thread_state()->context()->lr);
+      auto* ctx = thread->thread_state()->context();
+      slot->guest_lr = uint32_t(ctx->lr);
+      slot->guest_sp = uint32_t(ctx->r1.u32);
+      slot->guest_stack_lo = thread->guest_stack_limit();
+      slot->guest_stack_hi = thread->guest_stack_base();
     }
     slot->object_type = first ? uint32_t(first->type()) : 0;
     slot->handle = first ? first->handle() : 0;

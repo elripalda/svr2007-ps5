@@ -42,6 +42,10 @@
 
 namespace {
 
+#if REX_PLATFORM_PS5
+void Ps5EarlyFailure(const char* what);  // (below)
+#endif
+
 int RunWindowedApp(int argc, char** argv) {
 #if REX_PLATFORM_ANDROID
   rex::InitializeAndroid();  // [svr2011]
@@ -54,6 +58,10 @@ int RunWindowedApp(int argc, char** argv) {
   {
     rex::ui::SDLWindowedAppContext app_context;
     if (!app_context.Initialize()) {
+#if REX_PLATFORM_PS5
+      // (before the log file exists: the reason on the screen)
+      Ps5EarlyFailure("SDL didn't start");
+#endif
       return EXIT_FAILURE;
     }
 
@@ -141,6 +149,7 @@ int WINAPI wWinMain(HINSTANCE hinstance, HINSTANCE hinstance_prev, LPWSTR comman
 #include <cstring>
 #include <unistd.h>
 extern "C" int sceKernelSendNotificationRequest(int, void*, size_t, int);
+extern "C" int sceSystemServiceLoadExec(const char* path, char* const argv[]);
 static void Ps5Notify(const char* text) {
   struct {
     char unused[45];
@@ -151,17 +160,26 @@ static void Ps5Notify(const char* text) {
   sceKernelSendNotificationRequest(0, &request, sizeof(request), 0);
 }
 
+#include <SDL3/SDL_error.h>
+namespace {
+void Ps5EarlyFailure(const char* what) {
+  char text[600];
+  std::snprintf(text, sizeof(text), "%s: %s", what, SDL_GetError());
+  Ps5Notify(text);
+}
+}  // namespace
+
 // An uncaught C++ exception ends in abort() with its message on stderr, which
 // nobody sees on a PS5: put it in the log and on screen first.
 #include <exception>
 #include <typeinfo>
 static void Ps5Terminate() {
-  char text[600] = "SvR 2011: uncaught exception";
+  char text[600] = "Uncaught exception";
   if (auto current = std::current_exception()) {
     try {
       std::rethrow_exception(current);
     } catch (const std::exception& e) {
-      std::snprintf(text, sizeof(text), "SvR 2011: uncaught %s: %s", typeid(e).name(), e.what());
+      std::snprintf(text, sizeof(text), "Uncaught %s: %s", typeid(e).name(), e.what());
     } catch (...) {
     }
   }
@@ -174,6 +192,8 @@ static void Ps5Terminate() {
 // Every 10 s: the progress counters (rex/ps5_diag.h), so a black screen's
 // log shows which stage stopped moving.
 #include <rex/ps5_diag.h>
+#include <rex/system/kernel_state.h>
+#include <rex/system/xmemory.h>
 #include <spdlog/spdlog.h>
 #include <chrono>
 #include <thread>
@@ -197,6 +217,28 @@ static void Ps5DiagMonitor() {
                     w.thread_id, (now - since) / 1000, w.count > 1 ? w.count : 1,
                     ObjectTypeName(w.object_type), w.handle, w.count > 1 ? " (first of several)" : "",
                     w.guest_lr);
+        // its callers: each frame's back chain at 0(r1), the caller's LR
+        // saved at -8 from the caller's frame (mflr r12; stw r12,-8(r1);
+        // stwu ...) - read only where the guest memory is committed
+        if (auto* kernel = rex::system::kernel_state(); kernel && w.guest_sp && w.guest_stack_lo) {
+          auto* memory = kernel->memory();
+          auto readable = [&](uint32_t a) {
+            uint32_t protect = 0;
+            auto* heap = memory->LookupHeap(a);
+            return heap && heap->QueryProtect(a, &protect) && (protect & rex::memory::kMemoryProtectRead);
+          };
+          std::string callers;
+          uint32_t sp = w.guest_sp;
+          for (int i = 0; i < 8; ++i) {
+            if (sp < w.guest_stack_lo || sp + 4 > w.guest_stack_hi || (sp & 3) || !readable(sp)) break;
+            const uint32_t back = rex::memory::load_and_swap<uint32_t>(memory->TranslateVirtual(sp));
+            if (back <= sp || back < w.guest_stack_lo + 8 || back > w.guest_stack_hi || !readable(back - 8)) break;
+            callers += fmt::format(" < {:08X}",
+                                   rex::memory::load_and_swap<uint32_t>(memory->TranslateVirtual(back - 8)));
+            sp = back;
+          }
+          if (!callers.empty()) REXLOG_INFO("ps5 diag:     called from{}", callers);
+        }
         if (const auto* cs = static_cast<const uint8_t*>(w.critical_section)) {
           auto be32 = [cs](int off) {
             return uint32_t(cs[off]) << 24 | uint32_t(cs[off + 1]) << 16 |
@@ -237,16 +279,26 @@ int main(int argc, char* argv[]) {
   // A thread that crashed (it would retry its faulting instruction forever,
   // behind a frozen loading screen): say so and close the game.
   rex::ps5diag::crash_hook = [](const char* what) {
-    REXLOG_ERROR("SvR 2011: {} - closing (the log above says where)", what);
+    REXLOG_ERROR("{} - closing (the log above says where)", what);
     spdlog::apply_all([](const std::shared_ptr<spdlog::logger>& l) { l->flush(); });
-    Ps5Notify("SvR 2011 crashed - send /app0/logs to the developer");
+    Ps5Notify("The game crashed - send /app0/logs to the developer");
     sleep(2);
     _exit(1);
+  };
+  // EXIT in the game's main menu: start the app again, into its hub.
+  rex::ps5diag::title_exit_hook = [] {
+    REXLOG_INFO("back to the hub (restarting the app)");
+    spdlog::apply_all([](const std::shared_ptr<spdlog::logger>& l) { l->flush(); });
+    char* args[] = {nullptr};
+    const int rc = sceSystemServiceLoadExec("/app0/eboot.bin", args);
+    REXLOG_ERROR("restarting failed ({:#x}) - closing", uint32_t(rc));
+    spdlog::apply_all([](const std::shared_ptr<spdlog::logger>& l) { l->flush(); });
+    _exit(0);
   };
   std::set_terminate(Ps5Terminate);
   std::thread(Ps5DiagMonitor).detach();
   int result = RunWindowedApp(argc, argv);
-  if (result != 0) Ps5Notify("SvR 2011: stopped with an error - see /app0/logs");
+  if (result != 0) Ps5Notify("Stopped with an error - see /app0/logs");
   return result;
 }
 

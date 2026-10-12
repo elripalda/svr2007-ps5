@@ -9,6 +9,8 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
+#include <cerrno>
+#include <cstring>
 #include <rex/filesystem/devices/host_path_entry.h>
 #include <rex/filesystem/devices/host_path_file.h>
 
@@ -60,6 +62,8 @@ X_STATUS HostPathEntry::Open(uint32_t desired_access, File** out_file) {
       host_path_, desired_access, static_cast<HostPathDevice*>(device_)->allow_share_delete());
   if (!file_handle) {
     // TODO(benvanik): pick correct response.
+    REXFS_WARN("HostPathEntry: can't open {} (access {:08X}): {}", rex::path_to_utf8(host_path_), desired_access,
+               std::strerror(errno));
     return X_STATUS_NO_SUCH_FILE;
   }
   *out_file = new HostPathFile(desired_access, this, std::move(file_handle));

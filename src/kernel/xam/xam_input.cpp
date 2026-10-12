@@ -10,6 +10,8 @@
  */
 
 #include <rex/input/input.h>
+#include <cstring>
+
 #include <rex/input/input_system.h>
 #include <rex/kernel/xam/private.h>
 #include <rex/logging.h>
@@ -111,6 +113,15 @@ u32 XamInputGetState_entry(u32 user_index, u32 flags, ppc_ptr_t<X_INPUT_STATE> i
     actual_user_index = 0;
   }
 
+#if REX_PLATFORM_PS5
+  // [ps5 port] While a system dialog (message box, keyboard) is up, it owns
+  // the controller - as on the console, the game sees no buttons - and only
+  // the dialog reads the pad.
+  if (xeXamIsUIActive() && input_state) {
+    std::memset(static_cast<X_INPUT_STATE*>(input_state), 0, sizeof(X_INPUT_STATE));
+    return X_ERROR_SUCCESS;
+  }
+#endif
   auto* is = input_system();
   return is->GetState(actual_user_index, input_state);
 }
@@ -153,6 +164,9 @@ u32 XamInputGetKeystroke_entry(u32 user_index, u32 flags, ppc_ptr_t<X_INPUT_KEYS
     actual_user_index = 0;
   }
 
+#if REX_PLATFORM_PS5
+  if (xeXamIsUIActive()) return X_ERROR_EMPTY;
+#endif
   auto* is = input_system();
   return is->GetKeystroke(actual_user_index, flags, keystroke);
 }
@@ -175,6 +189,9 @@ u32 XamInputGetKeystrokeEx_entry(mapped_u32 user_index_ptr, u32 flags,
     user_index = 0;
   }
 
+#if REX_PLATFORM_PS5
+  if (xeXamIsUIActive()) return X_ERROR_EMPTY;
+#endif
   auto* is = input_system();
   auto result = is->GetKeystroke(user_index, flags, keystroke);
   if (XSUCCEEDED(result)) {

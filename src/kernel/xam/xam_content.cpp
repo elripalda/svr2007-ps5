@@ -23,6 +23,11 @@
 #include <rex/system/xtypes.h>
 
 REXCVAR_DEFINE_UINT32(license_mask, 0, "Kernel", "Set license mask for activated content");
+// [svr07] SmackDown vs. Raw 2007's save system (rexglue-sdk-yukes): a root
+// reopened is closed first, CREATE_ALWAYS opens existing content rather than
+// deleting it, and an overlapped create completes at once.
+REXCVAR_DEFINE_BOOL(xam_content_keep_existing, false, "Kernel",
+                    "XamContentCreate keeps existing content (SmackDown vs. Raw 2007)");
 
 namespace rex {
 namespace kernel {
@@ -138,18 +143,22 @@ u32 xeXamContentCreate(u32 user_index, mapped_string root_name, mapped_void cont
   }
 
   auto content_manager = REX_KERNEL_STATE()->content_manager();
+  const bool keep = REXCVAR_GET(xam_content_keep_existing);
 
   if (overlapped_ptr && disposition_ptr) {
     *disposition_ptr = 0;
   }
 
   // [svr2011] ANSI root names (this game uses "p0ú0") as UTF-8, as paths are.
-  auto run = [content_manager, xuid, root_name = util::AnsiToUtf8(root_name.value()), flags,
+  auto run = [content_manager, keep, xuid, root_name = util::AnsiToUtf8(root_name.value()), flags,
               content_data,
               disposition_ptr,
               license_mask_ptr](uint32_t& extended_error, uint32_t& length) -> X_RESULT {
     X_RESULT result = X_ERROR_INVALID_PARAMETER;
     kDispositionState disposition = kDispositionState::Unknown;
+    // [svr07] a root reopened without being closed (SmackDown vs. Raw 2007
+    // reopens its profile root many times)
+    if (keep) content_manager->CloseContent(root_name);
     switch (flags & 0xF) {
       case 1:  // CREATE_NEW
                // Fail if exists.
@@ -164,7 +173,9 @@ u32 xeXamContentCreate(u32 user_index, mapped_string root_name, mapped_void cont
         // Close any existing mount under this root name first.
         // Games may reuse the same root without explicitly closing.
         content_manager->CloseContent(root_name);
-        if (content_manager->ContentExists(xuid, content_data)) {
+        // [svr07] the console opens what exists: the game relies on its save
+        // surviving repeated CREATE_ALWAYS calls
+        if (!keep && content_manager->ContentExists(xuid, content_data)) {
           content_manager->DeleteContent(xuid, content_data);
         }
         // Check filesystem state after deletion attempt to decide
@@ -236,6 +247,13 @@ u32 xeXamContentCreate(u32 user_index, mapped_string root_name, mapped_void cont
   if (!overlapped_ptr) {
     uint32_t extended_error, length;
     return run(extended_error, length);
+  } else if (keep) {
+    // [svr07] at once: the game reads the disposition right after the call,
+    // before a deferred completion would have written it
+    uint32_t extended_error, length;
+    const X_RESULT result = run(extended_error, length);
+    REX_KERNEL_STATE()->CompleteOverlappedImmediate(overlapped_ptr.guest_address(), result);
+    return X_ERROR_IO_PENDING;
   } else {
     REX_KERNEL_STATE()->CompleteOverlappedDeferredEx(run, overlapped_ptr.guest_address());
     return X_ERROR_IO_PENDING;

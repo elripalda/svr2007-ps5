@@ -428,7 +428,8 @@ int Memory::MapViewsMac() {
         int a, b;
         const char* name;
       } pairs[] = {{8, 5, "phys raw->A0"}, {8, 6, "phys raw->C0"}, {5, 6, "A0->C0"},
-                   {3, 4, "xex 80->90"},   {2, 8, "7F->phys raw"}};
+                   {3, 4, "xex 80->90"},   {2, 8, "7F->phys raw"},
+                   {8, 7, "phys raw->E0"}};
       for (const Pair& p : pairs) {
         volatile uint32_t* wa = reinterpret_cast<volatile uint32_t*>(views_.all_views[p.a] + 0x40);
         volatile uint32_t* rb = reinterpret_cast<volatile uint32_t*>(views_.all_views[p.b] + 0x40);

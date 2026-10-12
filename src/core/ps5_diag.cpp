@@ -19,6 +19,7 @@ std::atomic<uint64_t> counters[kCount];
 WaitSlot wait_slots[kWaitSlots];
 uintptr_t guest_arena_lo = 0, guest_arena_hi = 0;
 void (*crash_hook)(const char* what) = nullptr;
+void (*title_exit_hook)() = nullptr;
 
 namespace {
 std::atomic<int> next_slot{0};

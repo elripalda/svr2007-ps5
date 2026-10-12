@@ -225,8 +225,31 @@ X_STATUS VirtualFileSystem::OpenFile(Entry* root_entry, const std::string_view p
 
     auto file_name = rex::string::utf8_find_name_from_guest_path(path);
     entry = parent_entry->GetChild(file_name);
+    // A file made on the host after the folder was indexed (a mod overlay
+    // written at start-up): the device looks it up on the disk.
+    if (!entry && dynamic_cast<const HostPathEntry*>(parent_entry)) {
+      entry = parent_entry->device()->ResolvePath(
+          rex::string::utf8_join_guest_paths(parent_entry->path(), file_name));
+      if (entry) REXFS_INFO("VFS: {} found on the disk (made after the index)", entry->absolute_path());
+    }
   } else {
     entry = !root_entry ? ResolvePath(path) : root_entry->GetChild(path);
+  }
+
+  // A symbolic link on one file (a replacement made at start-up): the lookup
+  // above went through the file's folder, which never sees it, so match the
+  // file it found against the links here, whichever path led to it.
+  if (entry && !(entry->attributes() & kFileAttributeDirectory) && !symlinks_.empty()) {
+    const std::string& found = entry->absolute_path();
+    for (const auto& [link, target] : symlinks_) {
+      if (!rex::string::utf8_equal_case(found, link)) continue;
+      if (Entry* swapped = ResolvePath(target)) {
+        REXFS_INFO("VFS: {} -> {}", found, swapped->absolute_path());
+        entry = swapped;
+        parent_entry = swapped->parent();
+      }
+      break;
+    }
   }
 
   if (entry) {

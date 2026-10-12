@@ -12,6 +12,9 @@
 #include <rex/kernel/xam/module.h>
 #include <rex/kernel/xam/private.h>
 #include <rex/logging.h>
+#if REX_PLATFORM_PS5
+#include <rex/ps5_diag.h>
+#endif
 #include <rex/cvar.h>
 #include <rex/hook.h>
 #include <rex/types.h>
@@ -298,6 +301,10 @@ void XamLoaderLaunchTitle_entry(mapped_string raw_name_ptr, u32 flags) {
       loader_data.launch_path = path;
     }
   } else {
+#if REX_PLATFORM_PS5
+    REXLOG_INFO("The game asked to quit (XamLoaderLaunchTitle, no title)");
+    if (rex::ps5diag::title_exit_hook) rex::ps5diag::title_exit_hook();
+#endif
     assert_always("Game requested exit to dashboard via XamLoaderLaunchTitle");
   }
 
@@ -306,6 +313,10 @@ void XamLoaderLaunchTitle_entry(mapped_string raw_name_ptr, u32 flags) {
 }
 
 void XamLoaderTerminateTitle_entry() {
+#if REX_PLATFORM_PS5
+  REXLOG_INFO("The game asked to quit (XamLoaderTerminateTitle)");
+  if (rex::ps5diag::title_exit_hook) rex::ps5diag::title_exit_hook();
+#endif
   // This function does not return.
   REX_KERNEL_STATE()->TerminateTitle();
 }

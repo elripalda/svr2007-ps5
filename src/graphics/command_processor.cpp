@@ -780,6 +780,12 @@ bool CommandProcessor::ExecutePacketType3(memory::RingBuffer* reader, uint32_t p
   uint32_t opcode = (packet >> 8) & 0x7F;
   uint32_t count = ((packet >> 16) & 0x3FFF) + 1;
   auto data_start_offset = reader->read_offset();
+  {
+    // [svr07] the first packets a game sends, in the log (where a first frame stops)
+    static std::atomic<uint32_t> logged{0};
+    if (logged.load(std::memory_order_relaxed) < 64 && logged.fetch_add(1) < 64)
+      REXGPU_DEBUG("GPU packet: type 3 op {:02X}, {} dwords", opcode, count);
+  }
 
   if (reader->read_count() < count * sizeof(uint32_t)) {
     REXGPU_ERROR("ExecutePacketType3 overflow (read count {:08X}, packet count {:08X})",
@@ -1083,6 +1089,12 @@ bool CommandProcessor::ExecutePacketType3_WAIT_REG_MEM(memory::RingBuffer* reade
         break;
     }
     if (!matched) {
+      // [svr07] a wait that doesn't end (a game stopped at its first frame):
+      // say what the GPU is waiting for
+      if (polls == 3000 || (polls % 60000) == 0)
+        REXGPU_WARN("GPU: WAIT_REG_MEM still waiting after {} polls: {} {:08X} func {} ref {:08X} (mask {:08X}); now {:08X}",
+                    polls, is_memory ? "memory" : "register", poll_reg_addr,
+                    wait_info & 0x7, ref, mask, value);
       if (trace && polls == 1) rex::timeline::Record(rex::timeline::kGpuWaitBegin, poll_reg_addr, ref);
       // Wait.
       if (wait >= 0x100) {

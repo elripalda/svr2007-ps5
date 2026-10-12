@@ -33,6 +33,8 @@ struct WaitSlot {
   uint32_t handle = 0;                // its handle
   uint32_t count = 0;                 // objects waited on
   uint32_t guest_lr = 0;              // the game code that waits
+  uint32_t guest_sp = 0;              // its stack pointer, and its stack [lo, hi): the
+  uint32_t guest_stack_lo = 0, guest_stack_hi = 0;  // monitor walks the callers from them
   uint32_t timeout_ms = 0;            // 0xFFFFFFFF: infinite
   const void* critical_section = nullptr;
   uint32_t critical_section_guest = 0;
@@ -57,6 +59,9 @@ void UnhandledHostFault(uintptr_t rip, uintptr_t address, uintptr_t rsp);
 // Called (once) when a thread keeps faulting: tells the player and ends the
 // game rather than leave it hanging. Set by main.
 extern void (*crash_hook)(const char* what);
+// The game asked to quit (to the dashboard): the app's answer (restart into
+// its own menu). Set: it doesn't return when it succeeds.
+extern void (*title_exit_hook)();
 uintptr_t Anchor();
 
 // Critical sections the game initialized (guest address -> game code).
