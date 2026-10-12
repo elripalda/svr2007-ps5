@@ -21,7 +21,7 @@ namespace svr07::hub {
 
 namespace fs = std::filesystem;
 
-static const char* const kTabNames[kTabCount] = {"HOME", "SETTINGS", "SAVES", "INSTALL", "ABOUT"};
+static const char* const kTabNames[kTabCount] = {"HOME", "SETTINGS", "SAVES", "ABOUT"};
 
 namespace {
 
@@ -155,9 +155,8 @@ void Hub::Load() {
     config_.emplace_back(k, v);
   }
   LoadSaves();
-  // (the disc images are looked for only when the game isn't installed yet)
+  // (the game's files come from the app store: only whether they're there)
   LoadInstall(false);
-  if (!state_.Installed()) LoadInstall(true);
 }
 
 void Hub::LoadSaves() {
@@ -593,12 +592,10 @@ void Hub::DrawHints() {
     r = Hint(r, kCross, confirm_yes_.c_str());
     return;
   }
-  if (tab_ != kHome && !task_ && (state_.Installed() || tab_ != kInstallTab))
-    r = Hint(r, kOptions, state_.Installed() ? "Start Game" : "Set Up Game");
-  if (tab_ != kHome && tab_ != kInstallTab) r = Hint(r, kCircle, "Home");
+  if (tab_ != kHome) r = Hint(r, kOptions, "Start Game");
+  if (tab_ != kHome) r = Hint(r, kCircle, "Home");
   switch (tab_) {
-    case kHome: r = Hint(r, kCross, state_.Installed() ? "Start Game" : "Set Up Game"); break;
-    case kInstallTab: r = InstallHints(r); break;
+    case kHome: r = Hint(r, kCross, "Start Game"); break;
     case kSettingsTab: r = Hint(r, kLeft | kRight, "Change"); break;
     case kSavesTab:
       if (item_[tab_] <= int(backups_.size())) r = Hint(r, kCross, item_[tab_] == 0 ? "Back Up" : "Restore");
@@ -688,7 +685,7 @@ void Hub::DrawHome() {
   const ImU32 ink = Mix(kInk, kText, press_);
   const float tx = bx + 40;
   dl_->AddTriangleFilled(P(tx, by + bh * 0.5f - 15), P(tx + 26, by + bh * 0.5f), P(tx, by + bh * 0.5f + 15), ink);
-  Text(a_.display, 40, tx + 48, by + bh * 0.5f - 23, ink, state_.Installed() ? "START GAME" : "SET UP GAME", 0, 2);
+  Text(a_.display, 40, tx + 48, by + bh * 0.5f - 23, ink, "START GAME", 0, 2);
   Fade(v0, in_btn);
 
 }
@@ -848,7 +845,6 @@ int Hub::Items() const {
   switch (tab_) {
     case kSettingsTab: return int(Settings().size());
     case kSavesTab: return 1 + int(backups_.size()) + int(save_items_.size());
-    case kInstallTab: return task_ ? 0 : int(images_.size());
     default: return 0;
   }
 }
@@ -902,12 +898,12 @@ void Hub::Navigate(const Pad& pad) {
   }
   // START GAME: once the game is installed (and not while it installs)
   auto start = [&] {
-    if (task_) {
+    if (!state_.Installed()) {
       Play(Sound::kError);
-      Toast("Wait for the install to finish");
-    } else if (!state_.Installed()) {
-      Play(Sound::kSelect);
-      GoTo(kInstallTab, 1);
+      Confirm("The game isn't installed",
+              "Install SmackDown vs. Raw 2007 with the app store, or copy the files of your disc image into "
+              "/data/homebrew/PPSA92007/Assets/ (default.xex, pac, sound... in Assets).",
+              "OK", [] {});
     } else {
       press_ = 1, launch_ = true;
     }
@@ -921,11 +917,6 @@ void Hub::Navigate(const Pad& pad) {
     Play(Sound::kPage);
     return;
   }
-  if ((p & kCircle) && tab_ == kInstallTab && task_) {
-    StopTask();
-    Play(Sound::kBack);
-    return;
-  }
   if ((p & kCircle) && tab_ != kHome) {
     GoTo(kHome, -1);
     Play(Sound::kBack);
@@ -933,10 +924,6 @@ void Hub::Navigate(const Pad& pad) {
   }
   if (tab_ == kHome) {
     if (p & kCross) start();
-    return;
-  }
-  if (tab_ == kInstallTab && !task_ && (p & kSquare)) {
-    InstallActivate(2);
     return;
   }
   const int n = Items();
@@ -955,10 +942,6 @@ void Hub::Navigate(const Pad& pad) {
     case kSavesTab:
       if (p & kCross) press_ = 1, Activate(0);
       break;
-    case kInstallTab:
-      if (p & kCross) press_ = 1, InstallActivate(0);
-      if (p & kTriangle) press_ = 0.6f, InstallActivate(1);
-      break;
   }
 }
 
@@ -974,7 +957,6 @@ void Hub::GoTo(int tab, float dir) {
   panel_item_ = item_[tab_];
   // (what these pages show can change while the hub is open: looked at again)
   if (tab == kSavesTab) LoadSaves();
-  if (tab == kInstallTab && !task_) LoadInstall(true);
 }
 
 bool Hub::Draw(const Pad& pad, float dt) {
@@ -1007,7 +989,6 @@ bool Hub::Draw(const Pad& pad, float dt) {
     case kHome: DrawHome(); break;
     case kSettingsTab: DrawSettings(); break;
     case kSavesTab: DrawSaves(); break;
-    case kInstallTab: DrawInstall(); break;
     case kAboutTab: DrawAbout(); break;
   }
   ox_ -= shift * s_;

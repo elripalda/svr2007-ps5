@@ -90,7 +90,7 @@ void Hub::PollTask() {
               fs::remove(image, e2);
               Toast(e2 ? "The disc image couldn't be deleted" : "Disc image deleted");
               LoadInstall(true);
-              item_[kInstallTab] = 0;
+              item_[tab_] = 0;
             });
   } else {
     Toast(p.result);
@@ -118,7 +118,7 @@ void Hub::InstallActivate(int what) {
               fs::remove(d.file, e2);
               Toast(e2 ? "It couldn't be deleted" : d.file.filename().string() + " deleted");
               LoadInstall(true);
-              item_[kInstallTab] = 0;
+              item_[tab_] = 0;
             });
     return;
   }

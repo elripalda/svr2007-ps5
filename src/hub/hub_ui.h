@@ -75,7 +75,7 @@ struct Audio {
 };
 
 // The pages, in the order of the top bar.
-enum Tab { kHome, kSettingsTab, kSavesTab, kInstallTab, kAboutTab, kTabCount };
+enum Tab { kHome, kSettingsTab, kSavesTab, kAboutTab, kTabCount };
 
 class Hub {
  public:
