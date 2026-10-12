@@ -93,7 +93,12 @@ EOF
 # Home screen art (your own, from assets/ps5/): icon0.png 512x512; pic0.dds /
 # pic1.dds the 3840x2160 BC7 background and launch splash.
 for asset in icon0.png pic0.dds pic1.dds snd0.at9; do
-    [[ -f $port/art/$asset ]] && cp "$port/art/$asset" "$app/sce_sys/$asset"
+    # art/local/ (gitignored) holds your own art; art/ the placeholders
+    if [[ -f $port/art/local/$asset ]]; then
+        cp "$port/art/local/$asset" "$app/sce_sys/$asset"
+    elif [[ -f $port/art/$asset ]]; then
+        cp "$port/art/$asset" "$app/sce_sys/$asset"
+    fi
 done
 "$tool" self --inspect --file "$app/eboot.bin" | tail -3
 echo "==> $app ($(stat -c %s "$app/eboot.bin") bytes)"
