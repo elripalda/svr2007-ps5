@@ -5,6 +5,8 @@
 
 #include <filesystem>
 #include <fstream>
+#include <string>
+#include <vector>
 
 #include <rex/cvar.h>
 #include <rex/filesystem.h>
@@ -30,6 +32,8 @@ constexpr char kDefaultConfig[] =
     "resolution_scale = 2\n"
     "anisotropic_override = 3\n"
     "vsync = true\n"
+    "# (a window, not fullscreen: fullscreen gives the hub and overlays a 4:3 screen on the PS5)\n"
+    "fullscreen = false\n"
     "# (the PS5's GPU driver: one plain buffer for the Xbox 360's memory, no sparse binding)\n"
     "vulkan_sparse_shared_memory = false\n"
     "\n"
@@ -71,7 +75,35 @@ void Svr07App::OnConfigurePaths(rex::PathConfig& paths) {
     std::getline(in, first);
     current = first.find(kConfigVersion) != std::string::npos;
   }
-  if (!current) std::ofstream(paths.config_path, std::ios::trunc) << kDefaultConfig;
+  if (!current) {
+    std::ofstream(paths.config_path, std::ios::trunc) << kDefaultConfig;
+  } else {
+    // (test 13's file: fullscreen gave the hub a 4:3 screen, stretched to the
+    // TV - added before the first [section], the other settings kept)
+    std::vector<std::string> lines;
+    bool has = false;
+    {
+      std::ifstream in(paths.config_path);
+      for (std::string l; std::getline(in, l);) {
+        if (l.rfind("fullscreen", 0) == 0 && l.find('=') != std::string::npos &&
+            l.substr(0, l.find('=')).find_last_not_of(" \t") == 9)
+          has = true;
+        lines.push_back(l);
+      }
+    }
+    if (!has) {
+      size_t at = lines.size();
+      for (size_t i = 0; i < lines.size(); ++i)
+        if (!lines[i].empty() && lines[i][0] == '[') {
+          at = i;
+          while (at > 0 && !lines[at - 1].empty() && lines[at - 1][0] == '#') --at;
+          break;
+        }
+      lines.insert(lines.begin() + std::ptrdiff_t(at), "fullscreen = false");
+      std::ofstream out(paths.config_path, std::ios::trunc);
+      for (const std::string& l : lines) out << l << "\n";
+    }
+  }
   g_config_path = paths.config_path;
 }
 

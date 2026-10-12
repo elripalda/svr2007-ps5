@@ -597,9 +597,6 @@ void Hub::DrawHints() {
     return;
   }
   if (tab_ != kHome) r = Hint(r, kOptions, "Start Game");
-  r = Hint(r, kR1, "");
-  r += 40 - 6;
-  r = Hint(r, kL1, "Pages");
   if (tab_ != kHome) r = Hint(r, kCircle, "Home");
   switch (tab_) {
     case kHome: r = Hint(r, kCross, "Start Game"); break;
@@ -608,7 +605,6 @@ void Hub::DrawHints() {
       if (item_[tab_] <= int(backups_.size())) r = Hint(r, kCross, item_[tab_] == 0 ? "Back Up" : "Restore");
       break;
   }
-  if (music_) r = Hint(r, kR3, "Next Song");
   // a message (bottom left, rising in), or the version
   if (toast_time_ > 0) {
     const float a = Smooth(std::min(toast_time_ * 3, (3.0f - toast_time_) * 6));
@@ -662,9 +658,8 @@ void Hub::DrawConfirm() {
 // ------------------------------------------------------------------- pages
 
 void Hub::DrawHome() {
-  // first open: the logo rises in, then the button, then the numbers
-  const float in_logo = Smooth((time_ - 0.15f) / 0.8f), in_btn = Smooth((time_ - 0.45f) / 0.6f),
-              in_stats = Smooth((time_ - 0.65f) / 0.6f);
+  // first open: the logo rises in, then the button
+  const float in_logo = Smooth((time_ - 0.15f) / 0.8f), in_btn = Smooth((time_ - 0.45f) / 0.6f);
   // (the 2007 logo is wider than 2011's: the same area on the screen)
   const float lx = 104, lw = 700;
   int v0 = dl_->VtxBuffer.Size;
@@ -697,35 +692,6 @@ void Hub::DrawHome() {
   Text(a_.display, 40, tx + 48, by + bh * 0.5f - 23, ink, "START GAME", 0, 2);
   Fade(v0, in_btn);
 
-  // what's set up, on the right
-  v0 = dl_->VtxBuffer.Size;
-  int saves = 0;
-  for (const SaveItem& s : save_items_) saves += s.kind == "Saved game" && s.name != "Extra Data";
-  std::string quality = "-";
-  for (const Setting& r : Settings())
-    if (r.short_label) {
-      quality = r.labels[size_t(SettingIndex(r))];
-      if (const size_t p = quality.find('('); p != std::string::npos) quality = quality.substr(p + 1, quality.size() - p - 2);
-    }
-  struct Stat {
-    std::string value;
-    const char* label;
-  };
-  const Stat stats[3] = {{std::to_string(saves), "SAVES"}, {std::to_string(backups_.size()), "BACKUPS"},
-                         {quality, "RENDERING"}};
-  float r = 1808;
-  const float sy = 862 + (1 - in_stats) * 24;
-  for (int i = 2; i >= 0; --i) {
-    const float w = std::max(TextWidth(a_.display, 52, stats[i].value), TextWidth(a_.body_bold, 15, stats[i].label, 2.5f));
-    Text(a_.display, 52, r, sy, kText, stats[i].value, 1);
-    Text(a_.body_bold, 15, r, sy + 68, White(0.55f), stats[i].label, 1, 2.5f);
-    r -= w;
-    if (i > 0) {
-      Rect(r - 40, sy + 10, 1.5f, 70, White(0.18f));
-      r -= 80;
-    }
-  }
-  Fade(v0, in_stats);
 }
 
 int Hub::SettingIndex(const Setting& r) const {
