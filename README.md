@@ -10,6 +10,10 @@
 </p>
 
 <p align="center">
+  <a href="https://recompstore.com/game/PPSA92007"><img alt="Get it on RecompStore" src="https://recompstore.com/assets/press/badge-dark.svg" height="56"></a>
+</p>
+
+<p align="center">
   <b>WWE SmackDown vs. Raw 2007</b> running natively on a jailbroken PS5,<br>
   a port of <a href="https://github.com/HollywoodAkeem/SVR07-Recomp"><b>HollywoodAkeem's SVR07-Recomp</b></a>.
 </p>
